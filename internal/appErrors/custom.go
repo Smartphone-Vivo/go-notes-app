@@ -1,4 +1,4 @@
-package errors
+package appErrors
 
 type NotFoundError struct {
 	Entity string
