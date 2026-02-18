@@ -8,6 +8,7 @@ import (
 	"test-task/db"
 	"test-task/internal/domain"
 	"test-task/internal/handlers"
+	middleware1 "test-task/internal/middleware"
 	"test-task/internal/repository"
 	"test-task/internal/service"
 )
@@ -23,24 +24,35 @@ func main() {
 		log.Fatalf("Could not connect to database: %v", err)
 	}
 
-	if err := database.AutoMigrate(&domain.Note{}); err != nil {
+	if err := database.AutoMigrate(&domain.User{}, &domain.Note{}); err != nil {
 		log.Fatal("Migration failed:", err)
 	}
 
 	e := echo.New()
 
 	noteRepo := repository.NewNotesRepository(database)
+	userRepo := repository.NewUserRepository(database)
+
 	noteService := service.NewNoteService(noteRepo)
+	userService := service.NewUserService(userRepo)
+
 	noteHandlers := handlers.NewNotesHandlers(noteService)
+	userHandlers := handlers.NewUserHandler(userService)
 
 	e.Use(middleware.CORS())
 	e.Use(middleware.Logger())
 
-	e.GET("/notes", noteHandlers.GetNotes)
-	e.GET("/notes/id/:id", noteHandlers.GetNoteById)
-	e.POST("/notes", noteHandlers.PostNotes)
-	e.DELETE("/notes/:id", noteHandlers.DeleteNote)
-	e.PATCH("notes/update/:id", noteHandlers.UpdateNote)
+	e.POST("/register", userHandlers.Register)
+	e.POST("/login", userHandlers.Login)
+
+	api := e.Group("/api")
+	api.Use(middleware1.AuthMiddleware)
+
+	api.GET("/notes", noteHandlers.GetNotes)
+	api.GET("/notes/id/:id", noteHandlers.GetNoteById)
+	api.POST("/notes", noteHandlers.PostNotes)
+	api.DELETE("/notes/:id", noteHandlers.DeleteNote)
+	api.PATCH("notes/update/:id", noteHandlers.UpdateNote)
 
 	e.Start("localhost:8080")
 

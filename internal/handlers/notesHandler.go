@@ -53,6 +53,7 @@ func (h *NotesHandler) GetNotes(c echo.Context) error {
 
 func (h *NotesHandler) PostNotes(c echo.Context) error {
 	ctx := c.Request().Context()
+	userID := c.Get("user_id").(string)
 
 	var req domain.CreateNoteRequest
 
@@ -60,7 +61,7 @@ func (h *NotesHandler) PostNotes(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Kal request"})
 	}
 
-	note, err := h.service.CreateNote(ctx, req.Title, req.Content)
+	note, err := h.service.CreateNote(ctx, userID, req.Title, req.Content)
 
 	if err != nil {
 		return h.handleError(c, err)

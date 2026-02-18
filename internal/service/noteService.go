@@ -8,7 +8,7 @@ import (
 )
 
 type NoteService interface {
-	CreateNote(ctx context.Context, noteTitle, noteContent string) (domain.Note, error)
+	CreateNote(ctx context.Context, userID, noteTitle, noteContent string) (domain.Note, error)
 	GetAllNotes(ctx context.Context) ([]domain.Note, error)
 	DeleteNote(ctx context.Context, id string) error
 	GetNoteById(ctx context.Context, id string) (domain.Note, error)
@@ -23,9 +23,10 @@ func NewNoteService(r repository.NotesRepository) NoteService {
 	return &noteService{repo: r}
 }
 
-func (s *noteService) CreateNote(ctx context.Context, noteTitle, noteContent string) (domain.Note, error) {
+func (s *noteService) CreateNote(ctx context.Context, userID, noteTitle, noteContent string) (domain.Note, error) {
 	note := domain.Note{
 		ID:      uuid.NewString(),
+		UserID:  userID,
 		Title:   noteTitle,
 		Content: noteContent,
 	}
