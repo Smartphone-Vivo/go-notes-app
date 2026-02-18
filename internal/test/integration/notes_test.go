@@ -19,18 +19,21 @@ import (
 
 	"test-task/internal/domain"
 	"test-task/internal/handlers"
+	"test-task/internal/middleware"
 	"test-task/internal/repository"
 	"test-task/internal/service"
 )
 
 var (
-	testDB  *gorm.DB
-	cleanup func()
-	testApp *echo.Echo
+	testDB    *gorm.DB
+	cleanup   func()
+	testApp   *echo.Echo
+	testToken string
 )
 
 func TestMain(m *testing.M) {
 	setupTestContainer()
+	setupTestUser()
 
 	code := m.Run()
 
@@ -69,19 +72,44 @@ func setupTestContainer() {
 		panic(err)
 	}
 
-	testDB.AutoMigrate(&domain.Note{})
+	testDB.AutoMigrate(&domain.User{}, &domain.Note{})
 
 	noteRepo := repository.NewNotesRepository(testDB)
+	userRepo := repository.NewUserRepository(testDB)
+
 	noteService := service.NewNoteService(noteRepo)
+	userService := service.NewUserService(userRepo)
+
 	noteHandlers := handlers.NewNotesHandlers(noteService)
+	userHandlers := handlers.NewUserHandler(userService)
 
 	testApp = echo.New()
-	testApp.GET("/notes", noteHandlers.GetNotes)
-	testApp.POST("/notes", noteHandlers.PostNotes)
-	testApp.GET("/notes/id/:id", noteHandlers.GetNoteById)
-	testApp.DELETE("/notes/:id", noteHandlers.DeleteNote)
+
+	testApp.POST("/register", userHandlers.Register)
+	testApp.POST("/login", userHandlers.Login)
+
+	api := testApp.Group("/api")
+	api.Use(middleware.AuthMiddleware)
+
+	api.GET("/notes", noteHandlers.GetNotes)
+	api.POST("/notes", noteHandlers.PostNotes)
+	api.GET("/notes/id/:id", noteHandlers.GetNoteById)
+	api.DELETE("/notes/:id", noteHandlers.DeleteNote)
 
 	cleanup = func() { pgContainer.Terminate(ctx) }
+}
+
+func setupTestUser() {
+	userJSON := `{"username":"testuser","password":"testpass"}`
+	req := httptest.NewRequest("POST", "/register", bytes.NewReader([]byte(userJSON)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	testApp.ServeHTTP(rec, req)
+
+	var resp map[string]interface{}
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+
+	testToken = resp["token"].(string)
 }
 
 func cleanTable() {
@@ -92,8 +120,9 @@ func TestCreateAndGetNote(t *testing.T) {
 	cleanTable()
 
 	noteJSON := `{"title":"Тест","content":"Привет"}`
-	req := httptest.NewRequest("POST", "/notes", bytes.NewReader([]byte(noteJSON)))
+	req := httptest.NewRequest("POST", "/api/notes", bytes.NewReader([]byte(noteJSON)))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+testToken)
 	rec := httptest.NewRecorder()
 	testApp.ServeHTTP(rec, req)
 
@@ -103,7 +132,8 @@ func TestCreateAndGetNote(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &created)
 	id := created["id"].(string)
 
-	req = httptest.NewRequest("GET", "/notes/id/"+id, nil)
+	req = httptest.NewRequest("GET", "/api/notes/id/"+id, nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
 	rec = httptest.NewRecorder()
 	testApp.ServeHTTP(rec, req)
 
@@ -111,12 +141,12 @@ func TestCreateAndGetNote(t *testing.T) {
 }
 
 func TestDeleteNote(t *testing.T) {
-
 	cleanTable()
 
 	noteJSON := `{"title":"Тест","content":"Привет"}`
-	req := httptest.NewRequest("POST", "/notes", bytes.NewReader([]byte(noteJSON)))
+	req := httptest.NewRequest("POST", "/api/notes", bytes.NewReader([]byte(noteJSON)))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+testToken)
 	rec := httptest.NewRecorder()
 	testApp.ServeHTTP(rec, req)
 
@@ -125,12 +155,14 @@ func TestDeleteNote(t *testing.T) {
 	id := created["id"].(string)
 	assert.NotEmpty(t, id)
 
-	req = httptest.NewRequest("DELETE", "/notes/"+id, nil)
+	req = httptest.NewRequest("DELETE", "/api/notes/"+id, nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
 	rec = httptest.NewRecorder()
 	testApp.ServeHTTP(rec, req)
 	assert.Equal(t, 204, rec.Code)
 
-	req = httptest.NewRequest("GET", "/notes/id/"+id, nil)
+	req = httptest.NewRequest("GET", "/api/notes/id/"+id, nil)
+	req.Header.Set("Authorization", "Bearer "+testToken)
 	rec = httptest.NewRecorder()
 	testApp.ServeHTTP(rec, req)
 	assert.Equal(t, 404, rec.Code)
