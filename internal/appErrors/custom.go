@@ -26,7 +26,3 @@ type DatabaseError struct {
 func (e DatabaseError) Error() string {
 	return "database error during" + e.Op + ": " + e.Err.Error()
 }
-
-func (e DatabaseError) Unwrap() error {
-	return e.Err
-}
