@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -8,6 +9,7 @@ import (
 	"test-task/db"
 	"test-task/internal/domain"
 	"test-task/internal/handlers"
+	"test-task/internal/kafka"
 	middleware1 "test-task/internal/middleware"
 	"test-task/internal/repository"
 	"test-task/internal/service"
@@ -28,16 +30,26 @@ func main() {
 		log.Fatal("Migration failed:", err)
 	}
 
-	e := echo.New()
+	kafkaConfig := kafka.NewConfig()
+	kafkaProducer := kafka.NewProducer(kafkaConfig)
+	defer kafkaProducer.Close()
 
 	noteRepo := repository.NewNotesRepository(database)
 	userRepo := repository.NewUserRepository(database)
 
-	noteService := service.NewNoteService(noteRepo)
+	kafkaConsumer := kafka.NewConsumer(kafkaConfig, noteRepo)
+	defer kafkaConsumer.Close()
+
+	ctx := context.Background()
+	go kafkaConsumer.ConsumeMessages(ctx)
+
+	noteService := service.NewNoteService(noteRepo, kafkaProducer)
 	userService := service.NewUserService(userRepo)
 
 	noteHandlers := handlers.NewNotesHandlers(noteService)
 	userHandlers := handlers.NewUserHandler(userService)
+
+	e := echo.New()
 
 	e.Use(middleware.CORS())
 	e.Use(middleware.Logger())

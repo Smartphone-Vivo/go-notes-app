@@ -4,7 +4,9 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"test-task/internal/domain"
+	"test-task/internal/kafka"
 	"test-task/internal/repository"
+	"time"
 )
 
 type NoteService interface {
@@ -12,26 +14,31 @@ type NoteService interface {
 	GetAllNotes(ctx context.Context) ([]domain.Note, error)
 	DeleteNote(ctx context.Context, id string) error
 	GetNoteById(ctx context.Context, id string) (domain.Note, error)
-	UpdateNote(ctx context.Context, id string, updateReq domain.UpdateNoteRequest) (domain.Note, error) // Изменено
+	UpdateNote(ctx context.Context, id string, updateReq domain.UpdateNoteRequest) (domain.Note, error)
 }
 
 type noteService struct {
-	repo repository.NotesRepository
+	repo     repository.NotesRepository
+	producer *kafka.Producer
 }
 
-func NewNoteService(r repository.NotesRepository) NoteService {
-	return &noteService{repo: r}
+func NewNoteService(r repository.NotesRepository, p *kafka.Producer) NoteService {
+	return &noteService{
+		repo:     r,
+		producer: p,
+	}
 }
 
 func (s *noteService) CreateNote(ctx context.Context, userID, noteTitle, noteContent string) (domain.Note, error) {
 	note := domain.Note{
-		ID:      uuid.NewString(),
-		UserID:  userID,
-		Title:   noteTitle,
-		Content: noteContent,
+		ID:        uuid.NewString(),
+		UserID:    userID,
+		Title:     noteTitle,
+		Content:   noteContent,
+		CreatedAt: time.Now(),
 	}
 
-	if err := s.repo.CreateNote(ctx, note); err != nil {
+	if err := s.producer.PublishNote(ctx, note); err != nil {
 		return domain.Note{}, err
 	}
 
