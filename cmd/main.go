@@ -49,6 +49,8 @@ func main() {
 	noteHandlers := handlers.NewNotesHandlers(noteService)
 	userHandlers := handlers.NewUserHandler(userService)
 
+	helloHandlers := handlers.NewHelloHandler()
+
 	e := echo.New()
 
 	e.Use(middleware.CORS())
@@ -56,6 +58,8 @@ func main() {
 
 	e.POST("/register", userHandlers.Register)
 	e.POST("/login", userHandlers.Login)
+
+	e.GET("/hello", helloHandlers.HelloEndpoint)
 
 	api := e.Group("/api")
 	api.Use(middleware1.AuthMiddleware)
